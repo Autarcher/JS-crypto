@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件加解密</title>
+</head>
+
+<body>
+    <input type="file" id="fileInput">
+    <button id="encryptButton">加密文件</button>
+    <button id="decryptButton">解密文件</button>
+    <a id="downloadLink" style="display: none;">下载文件</a>
+    <script src="../dist/gmCrypto.umd.js"></script>
+    <script>
+        const { SM4 } = gmCrypto;
+        const key = '9d4fb5654b5ece386742b3a74a6904e3'; // 32位十六进制密钥
+        const iv = '9d4fb5654b5ece386742b3a74a6904e3'; // 32位十六进制初始化向量
+        const chunkSize = 1 * 1024 * 1024 * 10; // 1M的块大小
+
+        const fileInput = document.getElementById('fileInput');
+        const encryptButton = document.getElementById('encryptButton');
+        const decryptButton = document.getElementById('decryptButton');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // 转换十六进制字符串为 Uint8Array
+        function hexToUint8Array(hex) {
+            const length = hex.length;
+            const uint8Array = new Uint8Array(length / 2);
+            for (let i = 0; i < length; i += 2) {
+                uint8Array[i / 2] = parseInt(hex.substr(i, 2), 16);
+            }
+            return Array.from(uint8Array)
+            .map(byte => byte.toString(16).padStart(2, '0')) // 将每个字节转换为 2 位十六进制
+            .join('');
+        }
+
+
+        // 填充数据
+        function padData(data) {
+            const paddingLength = 16 - (data.length % 16);
+            const paddedData = new Uint8Array(data.length + paddingLength);
+            paddedData.set(data);
+            for (let i = data.length; i < paddedData.length; i++) {
+                paddedData[i] = paddingLength;
+            }
+            return paddedData;
+        }
+
+        // 去除填充
+        function unpadData(data) {
+          // 将 ArrayBuffer 转换为 Uint8Array
+          const uint8Data = new Uint8Array(data);
+        
+          // 确保数据不为空
+          if (uint8Data.length === 0) {
+            throw new Error('Data cannot be empty');
+          }
+      
+          // 获取填充的长度（最后一个字节应该是填充的字节数）
+          const paddingLength = uint8Data[uint8Data.length - 1];
+      
+          // 如果填充的长度大于数据的长度，说明数据有问题
+          if (paddingLength > uint8Data.length) {
+            throw new Error('Padding length is greater than data length');
+          }
+      
+          // 返回去除填充后的数据
+          return uint8Data.slice(0, uint8Data.length - paddingLength);
+        }
+
+
+        // 加密文件
+        async function encryptFile(file) {
+            const reader = new FileReader();
+            const keyArray = hexToUint8Array(key);
+            let currentIV = hexToUint8Array(iv);
+            const encryptedChunks = [];
+            
+            let offset = 0;
+            while (offset < file.size) {
+                const chunk = file.slice(offset, offset + chunkSize);
+                const data = await new Promise((resolve) => {
+                    reader.onload = () => resolve(new Uint8Array(reader.result));
+                    reader.readAsArrayBuffer(chunk);
+                });
+
+                // const paddedData = padData(data);
+                const paddedData = data;
+                // 将 Uint8Array 转换为 ArrayBuffer
+                const paddedArrayBuffer = paddedData.buffer; 
+                const encryptedChunk = SM4.encrypt(paddedArrayBuffer, keyArray, {
+                    iv: currentIV,
+                    mode: 2, //ECB:1 CBC:2
+                    inputEncoding: null,
+                    outputEncoding: null
+                });
+
+                encryptedChunks.push(encryptedChunk);
+                currentIV = encryptedChunk.slice(-16); // 更新IV为当前加密块的最后16字节
+                offset += chunkSize;
+            }
+
+            const encryptedBlob = new Blob(encryptedChunks);
+            return encryptedBlob;
+        }
+
+        // 解密文件
+        async function decryptFile(file) {
+            const reader = new FileReader();
+            const keyArray = hexToUint8Array(key);
+            let currentIV = hexToUint8Array(iv);
+            const decryptedChunks = [];
+
+            let offset = 0;
+            while (offset < file.size) {
+                const chunk = file.slice(offset, offset + chunkSize);
+                const data = await new Promise((resolve) => {
+                    reader.onload = () => resolve(new Uint8Array(reader.result));
+                    reader.readAsArrayBuffer(chunk);
+                });
+
+                // 将 Uint8Array 转换为 ArrayBuffer
+                const dataArrayBuffer = data.buffer; 
+                const decryptedChunk = SM4.decrypt(dataArrayBuffer, keyArray, {
+                    iv: currentIV,
+                    mode: 2, //ECB:1 CBC:2
+                    inputEncoding: null,
+                    outputEncoding: null
+                });
+
+                // const unpaddedChunk = unpadData(decryptedChunk);
+                const unpaddedChunk = decryptedChunk;
+                decryptedChunks.push(unpaddedChunk);
+                currentIV = data.slice(-16); // 更新IV为当前加密块的最后16字节
+                offset += chunkSize;
+            }
+
+            const decryptedBlob = new Blob(decryptedChunks);
+            return decryptedBlob;
+        }
+
+        // 下载文件
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            downloadLink.href = url;
+            downloadLink.download = filename;
+            downloadLink.style.display = 'inline-block';
+            downloadLink.textContent = `点击下载 ${filename}`;
+        }
+
+        // 加密按钮点击事件
+        encryptButton.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (file) {
+                const encryptedBlob = await encryptFile(file);
+                downloadBlob(encryptedBlob, 'encrypted_' + file.name);
+            }
+        });
+
+        // 解密按钮点击事件
+        decryptButton.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (file) {
+                const decryptedBlob = await decryptFile(file);
+                downloadBlob(decryptedBlob, 'decrypted_' + file.name);
+            }
+        });
+    </script>
+</body>
+
+</html>

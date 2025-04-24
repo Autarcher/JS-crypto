@@ -1,10 +1,31 @@
-import toArrayBuffer from 'to-arraybuffer'
+// import toArrayBuffer from 'to-arraybuffer'
+// 示例：从 Hex 字符串转换为 ArrayBuffer
+function hexToArrayBuffer(hex) {
+  if (typeof hex === 'string') {
+    // 如果是十六进制字符串
+    if (hex.length % 2 !== 0) {
+      throw new Error('Invalid hex string length');
+    }
+
+    var byteArray = new Uint8Array(hex.length / 2);
+    for (var i = 0; i < hex.length; i += 2) {
+      byteArray[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return byteArray.buffer; // 返回 ArrayBuffer
+  } else if (hex instanceof Uint8Array || hex instanceof ArrayBuffer) {
+    // 如果是 Uint8Array 或 ArrayBuffer，直接返回
+    return hex instanceof ArrayBuffer ? hex : hex.buffer;
+  } else {
+    throw new TypeError('Invalid input type, expected string or Uint8Array');
+  }
+}
 import { Buffer } from 'buffer' // 兼容浏览器环境
-import { leftShift } from './utils'
+import { leftShift, leftPad } from './utils.js';
 
 // 两种分组模式
 const ECB = 1
 const CBC = 2
+const CTR = 3
 
 // SM4 相关常量
 export const constants = { ECB, CBC }
@@ -432,32 +453,28 @@ const toCipcherBlock = (array) => {
   return block
 }
 
-const _encrypt = (data, key, iv, outputEncoding) => {
-  // 初始化向量转换
-  iv && (iv = toInt32Array(iv))
+//  ctr_incr, ctr iv加一
+function ctr_incr(a) {
+  for (let i = 15; i >= 0; i--) {
+    a[i]++;
+    if (a[i]) break;
+  }
+}
+const _encrypt = (data, key, iv, outputEncoding, mode) => {
+  // // 初始化向量转换
+  // iv && (iv = toInt32Array(iv))
   // 密钥转换
   key = toInt32Array(key)
-  // 分组填充
-  data = pkcs7Padding(data)
+  // 分组填充, 改造我们自己来做填充
+  // data = pkcs7Padding(data)
 
   // 分组加密结果
   const blocks = []
   // 分组数(每组 16 字节)
   const num = data.length / BLOCK_SIZE
 
-  for (let i = 0; i < num; i++) {
-    if (iv) {
-      const offset = i * BLOCK_SIZE
-      const plainBlock = [
-        iv[0] ^ data.readInt32BE(offset),
-        iv[1] ^ data.readInt32BE(offset + 4),
-        iv[2] ^ data.readInt32BE(offset + 8),
-        iv[3] ^ data.readInt32BE(offset + 12)
-      ]
-      const cipherBlock = encryptBlock(plainBlock, key)
-      blocks.push(toCipcherBlock(cipherBlock))
-      iv = cipherBlock.slice(0) // 将本次密文作为下一次加密的 iv
-    } else {
+  if (mode == ECB) {
+    for (let i = 0; i < num; i++) {
       const offset = i * BLOCK_SIZE
       const plainBlock = [
         data.readInt32BE(offset),
@@ -466,17 +483,78 @@ const _encrypt = (data, key, iv, outputEncoding) => {
         data.readInt32BE(offset + 12)
       ]
       const cipherBlock = encryptBlock(plainBlock, key)
-      blocks.push(toCipcherBlock(cipherBlock))
+      blocks.push(toCipcherBlock(cipherBlock));
+    }
+  } else if (mode == CBC) {
+    iv = toInt32Array(iv);
+    for (let i = 0; i < num; i++) {
+      const offset = i * BLOCK_SIZE;
+      const plainBlock = [
+        iv[0] ^ data.readInt32BE(offset),
+        iv[1] ^ data.readInt32BE(offset + 4),
+        iv[2] ^ data.readInt32BE(offset + 8),
+        iv[3] ^ data.readInt32BE(offset + 12)
+      ];
+      const cipherBlock = encryptBlock(plainBlock, key);
+      blocks.push(toCipcherBlock(cipherBlock));
+      iv = cipherBlock.slice(0); // 将本次密文作为下一次加密的 iv
+    }
+  } else if (mode == CTR) {
+    iv = Buffer.from(iv);
+    for (let i = 0; i < num; i++) {
+      const offset = i * BLOCK_SIZE;
+      const ctrBlock = Buffer.alloc(16);
+      // 对计数器进行加密
+      const encryptedCtr = encryptBlock(toInt32Array(iv), key);
+      // 将加密后的计数器结果写入 ctrBlock
+      encryptedCtr.forEach((value, index) => {
+        ctrBlock.writeInt32BE(value, index * 4);
+      });
+      // 计数器递增
+      ctr_incr(iv);
+      // 获取当前明文块
+      const plainBlock = data.slice(offset, offset + BLOCK_SIZE);
+      // 明文块与加密后的计数器结果异或得到密文块
+      const encryptedBlock = Buffer.alloc(16);
+      for (let j = 0; j < BLOCK_SIZE; j++) {
+        encryptedBlock[j] = plainBlock[j] ^ ctrBlock[j];
+      }
+      blocks.push(encryptedBlock);
     }
   }
 
+  // for (let i = 0; i < num; i++) {
+  //   if (iv) {
+  //     const offset = i * BLOCK_SIZE
+  //     const plainBlock = [
+  //       iv[0] ^ data.readInt32BE(offset),
+  //       iv[1] ^ data.readInt32BE(offset + 4),
+  //       iv[2] ^ data.readInt32BE(offset + 8),
+  //       iv[3] ^ data.readInt32BE(offset + 12)
+  //     ]
+  //     const cipherBlock = encryptBlock(plainBlock, key)
+  //     blocks.push(toCipcherBlock(cipherBlock))
+  //     iv = cipherBlock.slice(0) // 将本次密文作为下一次加密的 iv
+  //   } else {
+  //     const offset = i * BLOCK_SIZE
+  //     const plainBlock = [
+  //       data.readInt32BE(offset),
+  //       data.readInt32BE(offset + 4),
+  //       data.readInt32BE(offset + 8),
+  //       data.readInt32BE(offset + 12)
+  //     ]
+  //     const cipherBlock = encryptBlock(plainBlock, key)
+  //     blocks.push(toCipcherBlock(cipherBlock))
+  //   }
+  // }
+
   const buff = Buffer.concat(blocks, data.length)
-  return outputEncoding ? buff.toString(outputEncoding) : toArrayBuffer(buff)
+  return outputEncoding ? buff.toString(outputEncoding) : hexToArrayBuffer(buff)
 }
 
-const _decrypt = (data, key, iv, outputEncoding) => {
-  // 初始化向量转换
-  iv && (iv = toInt32Array(iv))
+const _decrypt = (data, key, iv, outputEncoding, mode) => {
+  // // 初始化向量转换
+  // iv && (iv = toInt32Array(iv))
   // 密钥转换
   key = toInt32Array(key)
 
@@ -484,21 +562,33 @@ const _decrypt = (data, key, iv, outputEncoding) => {
   const blocks = []
   // 按每组 16 字节分组后得到的总分组数
   const num = data.length / BLOCK_SIZE
-
-  if (iv) {
+  if (mode == ECB) { // ECB 模式
+    for (let i = 0; i < num; i++) {
+      const offset = i * BLOCK_SIZE;
+      const cipherBlock = [
+        data.readInt32BE(offset),
+        data.readInt32BE(offset + 4),
+        data.readInt32BE(offset + 8),
+        data.readInt32BE(offset + 12)
+      ];
+      const plainBlock = decryptBlock(cipherBlock, key);
+      blocks.push(toCipcherBlock(plainBlock));
+    }
+  } else if (mode == CBC) { // CBC 模式
+    iv = toInt32Array(iv);
     for (let i = num - 1; i >= 0; i--) {
-      const offset = i * BLOCK_SIZE
+      const offset = i * BLOCK_SIZE;
 
-      let vector
+      let vector;
       if (i > 0) {
         vector = [
           data.readInt32BE(offset - BLOCK_SIZE),
           data.readInt32BE(offset - BLOCK_SIZE + 4),
           data.readInt32BE(offset - BLOCK_SIZE + 8),
           data.readInt32BE(offset - BLOCK_SIZE + 12)
-        ]
+        ];
       } else {
-        vector = iv
+        vector = iv;
       }
 
       const cipherBlock = [
@@ -506,37 +596,94 @@ const _decrypt = (data, key, iv, outputEncoding) => {
         data.readInt32BE(offset + 4),
         data.readInt32BE(offset + 8),
         data.readInt32BE(offset + 12)
-      ]
-      const [b0, b1, b2, b3] = decryptBlock(cipherBlock, key)
+      ];
+      const [b0, b1, b2, b3] = decryptBlock(cipherBlock, key);
       const plainBlock = [
         b0 ^ vector[0],
         b1 ^ vector[1],
         b2 ^ vector[2],
         b3 ^ vector[3]
-      ]
+      ];
 
-      blocks.unshift(toCipcherBlock(plainBlock))
+      blocks.unshift(toCipcherBlock(plainBlock));
     }
-  } else {
+  } else if (mode == CTR) { // CTR 模式
+    iv = Buffer.from(iv);
     for (let i = 0; i < num; i++) {
-      const offset = i * BLOCK_SIZE
-      const cipherBlock = [
-        data.readInt32BE(offset),
-        data.readInt32BE(offset + 4),
-        data.readInt32BE(offset + 8),
-        data.readInt32BE(offset + 12)
-      ]
-      const plainBlock = decryptBlock(cipherBlock, key)
-      blocks.push(toCipcherBlock(plainBlock))
+      const offset = i * BLOCK_SIZE;
+      const ctrBlock = Buffer.alloc(16);
+      // 加密ctr计数器
+      encryptBlock(toInt32Array(iv), key).forEach((value, index) => {
+        ctrBlock.writeInt32BE(value, index * 4);
+      });
+      // 计数器加一
+      ctr_incr(iv);
+      const cipherBlock = data.slice(offset, offset + BLOCK_SIZE);
+      const decryptedBlock = Buffer.alloc(16);
+      // 加密后的计数器和明文异或得到密文
+      for (let j = 0; j < BLOCK_SIZE; j++) {
+        decryptedBlock[j] = cipherBlock[j] ^ ctrBlock[j];
+      }
+      blocks.push(decryptedBlock);
     }
   }
+  // if (iv) {
+  //   for (let i = num - 1; i >= 0; i--) {
+  //     const offset = i * BLOCK_SIZE
+
+  //     let vector
+  //     if (i > 0) {
+  //       vector = [
+  //         data.readInt32BE(offset - BLOCK_SIZE),
+  //         data.readInt32BE(offset - BLOCK_SIZE + 4),
+  //         data.readInt32BE(offset - BLOCK_SIZE + 8),
+  //         data.readInt32BE(offset - BLOCK_SIZE + 12)
+  //       ]
+  //     } else {
+  //       vector = iv
+  //     }
+
+  //     const cipherBlock = [
+  //       data.readInt32BE(offset),
+  //       data.readInt32BE(offset + 4),
+  //       data.readInt32BE(offset + 8),
+  //       data.readInt32BE(offset + 12)
+  //     ]
+  //     const [b0, b1, b2, b3] = decryptBlock(cipherBlock, key)
+  //     const plainBlock = [
+  //       b0 ^ vector[0],
+  //       b1 ^ vector[1],
+  //       b2 ^ vector[2],
+  //       b3 ^ vector[3]
+  //     ]
+
+  //     blocks.unshift(toCipcherBlock(plainBlock))
+  //   }
+  // } else {
+  //   for (let i = 0; i < num; i++) {
+  //     const offset = i * BLOCK_SIZE
+  //     const cipherBlock = [
+  //       data.readInt32BE(offset),
+  //       data.readInt32BE(offset + 4),
+  //       data.readInt32BE(offset + 8),
+  //       data.readInt32BE(offset + 12)
+  //     ]
+  //     const plainBlock = decryptBlock(cipherBlock, key)
+  //     blocks.push(toCipcherBlock(plainBlock))
+  //   }
+  // }
 
   // 移除分组填充
+  // console.log("padding len:", blocks[blocks.length - 1][BLOCK_SIZE - 1])
+  // const buff = Buffer.concat(
+  //   blocks,
+  //   data.length - blocks[blocks.length - 1][BLOCK_SIZE - 1]
+  // )
+  // 不移除分组，在外面设置移除
   const buff = Buffer.concat(
     blocks,
-    data.length - blocks[blocks.length - 1][BLOCK_SIZE - 1]
   )
-  return outputEncoding ? buff.toString(outputEncoding) : toArrayBuffer(buff)
+  return outputEncoding ? buff.toString(outputEncoding) : hexToArrayBuffer(buff)
 }
 
 export const encrypt = (data, key, options) => {
@@ -563,12 +710,12 @@ export const encrypt = (data, key, options) => {
   key = Buffer.from(key, 'hex')
 
   // CBC 分组必须制定 iv
-  if (mode === CBC && !REG_EXP_KEY.test(iv)) {
+  if (mode != ECB && !REG_EXP_KEY.test(iv)) {
     throw new TypeError('Invalid value of `iv` option')
   }
-  iv = mode === CBC ? Buffer.from(iv, 'hex') : null
+  iv = mode != ECB? Buffer.from(iv, 'hex') : null
 
-  return _encrypt(data, key, iv, outputEncoding)
+  return _encrypt(data, key, iv, outputEncoding, mode)
 }
 
 export const decrypt = (data, key, options) => {
@@ -595,10 +742,10 @@ export const decrypt = (data, key, options) => {
   key = Buffer.from(key, 'hex')
 
   // CBC 分组必须制定 iv
-  if (mode === CBC && !REG_EXP_KEY.test(iv)) {
+  if (mode != ECB && !REG_EXP_KEY.test(iv)) {
     throw new TypeError('Invalid value of `iv` option')
   }
-  iv = mode === CBC ? Buffer.from(iv, 'hex') : null
+  iv = mode != ECB ? Buffer.from(iv, 'hex') : null
 
-  return _decrypt(data, key, iv, outputEncoding)
+  return _decrypt(data, key, iv, outputEncoding, mode)
 }

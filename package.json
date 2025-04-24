@@ -12,13 +12,18 @@
     "types",
     "dist"
   ],
-  "scripts": {
+  "_scripts": {
     "commit": "cz",
-    "clean": "rm -rf dist",
-    "build": "npm run clean && microbundle --entry src/index.js --sourcemap false",
+    "clean": "rimraf dist",
+    "_build": "npm run clean && microbundle --entry src/index.js --sourcemap false",
+    "build": "npm run clean && microbundle --entry src/index.js --no-external --sourcemap false",
     "build:coverage": "npm run clean && microbundle --entry src/index.js --sourcemap true",
     "test": "npm run build:coverage && nyc --reporter=json ava -v",
     "prepublishOnly": "npm run build"
+  },
+  "scripts": {
+  "build": "webpack --config webpack.config.js",
+  "start": "webpack serve --config webpack.config.js --open"
   },
   "repository": {
     "type": "git",
@@ -35,20 +40,30 @@
   "author": "panjizhi1987@gmail.com",
   "license": "MIT",
   "dependencies": {
-    "buffer": "^5.7.0",
+    "base64-js": "^1.5.1",
+    "buffer": "^5.7.1",
     "jsbn": "^1.1.0",
     "to-arraybuffer": "^1.0.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.26.10",
+    "@babel/preset-env": "^7.26.9",
     "@commitlint/cli": "^11.0.0",
     "@commitlint/config-conventional": "^11.0.0",
-    "ava": "^3.13.0",
+    "@rollup/plugin-inject": "^5.0.5",
+    "ava": "^3.15.0",
+    "babel-loader": "^10.0.0",
     "commitizen": "^4.2.2",
     "cz-conventional-changelog": "^3.3.0",
     "husky": "^4.3.0",
     "microbundle": "^0.12.4",
+    "node-polyfill-webpack-plugin": "^4.1.0",
     "nyc": "^15.1.0",
-    "prettier": "^2.1.2"
+    "prettier": "^2.1.2",
+    "rollup-plugin-node-builtins": "^2.1.2",
+    "webpack": "^5.99.6",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.1"
   },
   "config": {
     "commitizen": {
@@ -59,6 +74,29 @@
     "hooks": {
       "commit-msg": "commitlint -E HUSKY_GIT_PARAMS",
       "pre-push": "npm test"
+    }
+  },
+  "microbundle": {
+    "rollup": {
+      "plugins": [
+        [
+          "@rollup/plugin-inject",
+          {
+            "Buffer": [
+              "buffer",
+              "Buffer"
+            ]
+          }
+        ],
+        [
+          "rollup-plugin-node-builtins"
+        ]
+      ]
+    },
+    "alias": {
+      "buffer": "./node_modules/buffer",
+      "base64-js": "./node_modules/base64-js",
+      "jsbn": "./node_modules/jsbn"
     }
   }
 }
