@@ -38,7 +38,7 @@ npm run build
 
 ## 注意：
 
-- 如果你想测试源项目的test请将package.json的内容换位package_old.json
+- 如果你想测试源项目的test请将package.json的内容换为package_old.json
 
   源项目链接:https://www.npmjs.com/package/gm-crypto
 
