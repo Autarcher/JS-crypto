@@ -1,3 +1,57 @@
+# JS-cryptp
+
+​	本项目为gm-crypto项目的拓展，实现了sm4的纯浏览器的ECB，CBC，CTR的加解密。加解密保证了与GMSSL项目中的标准SM4加解密一致。同时实现了浏览器端的文件加解密测试。
+
+> GMSSL项目地址：https://github.com/guanzhi/GmSSL
+
+## 与gm-crypto的差异修改
+
+​	项目修改了web包的构建方法采用webpack的方式打包。具体打包配置修改参考webpack.config.js和package.json。本项目同时也提供了填充方法自定义的方式，代码已经被注释。
+
+​	项目的ctr实现逻辑详细请查看“src/lib/smr.js”
+
+## 启动和浏览器测试
+
+你需要按照以下步骤准备打包测试环境
+
+### 构建前端使用的js包
+
+```shell
+// 按照项目环境依赖
+npm install
+// 生成browser可用的js包（生成dist下的gmCrypto.js）
+npm run build
+```
+
+### 运行前端测试
+
+> - 项目提供ECB，CBC， CTR三种模式的加解密测试，你只需要更改MODEL的值(ECB:1 CBC:2 CTR:3)
+> - 项目的加解密文件是一次性载入内存的逻辑，测试时推荐文件大小不要超过1M。 你可以自行修改文件的读取逻辑。
+
+#### 	加密：
+
+​	用浏览器（推荐Chrome浏览器）打开browser_test下的browsers_sm4.html文件选择data文件夹下的123.txt文件点击加密文件即可。
+
+#### 	解密：
+
+​	将加密后的文件下载保存，选择加密后的文件点击解密即可。
+
+## 注意：
+
+- 如果你想测试源项目的test请将package.json的内容换位package_old.json
+
+  源项目链接:https://www.npmjs.com/package/gm-crypto
+
+  git仓库:https://github.com/byte-fe/gm-crypto
+
+
+
+------
+
+
+
+# 源项目README:
+
 # gm-crypto
 
 [![Build Status](https://github.com/byte-fe/gm-crypto/actions/workflows/codecov.yml/badge.svg)](https://github.com/byte-fe/gm-crypto/actions/workflows/codecov.yml)

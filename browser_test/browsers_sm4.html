@@ -23,6 +23,7 @@
         const encryptButton = document.getElementById('encryptButton');
         const decryptButton = document.getElementById('decryptButton');
         const downloadLink = document.getElementById('downloadLink');
+        const MODEL = 3;
 
         // 转换十六进制字符串为 Uint8Array
         function hexToUint8Array(hex) {
@@ -92,7 +93,7 @@
                 const paddedArrayBuffer = paddedData.buffer; 
                 const encryptedChunk = SM4.encrypt(paddedArrayBuffer, keyArray, {
                     iv: currentIV,
-                    mode: 2, //ECB:1 CBC:2
+                    mode: MODEL, //ECB:1 CBC:2 CTR:3
                     inputEncoding: null,
                     outputEncoding: null
                 });
@@ -125,7 +126,7 @@
                 const dataArrayBuffer = data.buffer; 
                 const decryptedChunk = SM4.decrypt(dataArrayBuffer, keyArray, {
                     iv: currentIV,
-                    mode: 2, //ECB:1 CBC:2
+                    mode: MODEL, //ECB:1 CBC:2 CTR:3
                     inputEncoding: null,
                     outputEncoding: null
                 });

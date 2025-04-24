@@ -453,7 +453,7 @@ const toCipcherBlock = (array) => {
   return block
 }
 
-//  ctr_incr, ctr iv加一
+// 实现ctr的iv加一
 function ctr_incr(a) {
   for (let i = 15; i >= 0; i--) {
     a[i]++;
@@ -465,8 +465,8 @@ const _encrypt = (data, key, iv, outputEncoding, mode) => {
   // iv && (iv = toInt32Array(iv))
   // 密钥转换
   key = toInt32Array(key)
-  // 分组填充, 改造我们自己来做填充
-  // data = pkcs7Padding(data)
+  // 分组填充(注释需要同时注释_decrypt的去填充逻辑采用不取填充逻辑)
+  data = pkcs7Padding(data)
 
   // 分组加密结果
   const blocks = []
@@ -522,31 +522,6 @@ const _encrypt = (data, key, iv, outputEncoding, mode) => {
       blocks.push(encryptedBlock);
     }
   }
-
-  // for (let i = 0; i < num; i++) {
-  //   if (iv) {
-  //     const offset = i * BLOCK_SIZE
-  //     const plainBlock = [
-  //       iv[0] ^ data.readInt32BE(offset),
-  //       iv[1] ^ data.readInt32BE(offset + 4),
-  //       iv[2] ^ data.readInt32BE(offset + 8),
-  //       iv[3] ^ data.readInt32BE(offset + 12)
-  //     ]
-  //     const cipherBlock = encryptBlock(plainBlock, key)
-  //     blocks.push(toCipcherBlock(cipherBlock))
-  //     iv = cipherBlock.slice(0) // 将本次密文作为下一次加密的 iv
-  //   } else {
-  //     const offset = i * BLOCK_SIZE
-  //     const plainBlock = [
-  //       data.readInt32BE(offset),
-  //       data.readInt32BE(offset + 4),
-  //       data.readInt32BE(offset + 8),
-  //       data.readInt32BE(offset + 12)
-  //     ]
-  //     const cipherBlock = encryptBlock(plainBlock, key)
-  //     blocks.push(toCipcherBlock(cipherBlock))
-  //   }
-  // }
 
   const buff = Buffer.concat(blocks, data.length)
   return outputEncoding ? buff.toString(outputEncoding) : hexToArrayBuffer(buff)
@@ -627,62 +602,16 @@ const _decrypt = (data, key, iv, outputEncoding, mode) => {
       blocks.push(decryptedBlock);
     }
   }
-  // if (iv) {
-  //   for (let i = num - 1; i >= 0; i--) {
-  //     const offset = i * BLOCK_SIZE
-
-  //     let vector
-  //     if (i > 0) {
-  //       vector = [
-  //         data.readInt32BE(offset - BLOCK_SIZE),
-  //         data.readInt32BE(offset - BLOCK_SIZE + 4),
-  //         data.readInt32BE(offset - BLOCK_SIZE + 8),
-  //         data.readInt32BE(offset - BLOCK_SIZE + 12)
-  //       ]
-  //     } else {
-  //       vector = iv
-  //     }
-
-  //     const cipherBlock = [
-  //       data.readInt32BE(offset),
-  //       data.readInt32BE(offset + 4),
-  //       data.readInt32BE(offset + 8),
-  //       data.readInt32BE(offset + 12)
-  //     ]
-  //     const [b0, b1, b2, b3] = decryptBlock(cipherBlock, key)
-  //     const plainBlock = [
-  //       b0 ^ vector[0],
-  //       b1 ^ vector[1],
-  //       b2 ^ vector[2],
-  //       b3 ^ vector[3]
-  //     ]
-
-  //     blocks.unshift(toCipcherBlock(plainBlock))
-  //   }
-  // } else {
-  //   for (let i = 0; i < num; i++) {
-  //     const offset = i * BLOCK_SIZE
-  //     const cipherBlock = [
-  //       data.readInt32BE(offset),
-  //       data.readInt32BE(offset + 4),
-  //       data.readInt32BE(offset + 8),
-  //       data.readInt32BE(offset + 12)
-  //     ]
-  //     const plainBlock = decryptBlock(cipherBlock, key)
-  //     blocks.push(toCipcherBlock(plainBlock))
-  //   }
-  // }
-
   // 移除分组填充
-  // console.log("padding len:", blocks[blocks.length - 1][BLOCK_SIZE - 1])
-  // const buff = Buffer.concat(
-  //   blocks,
-  //   data.length - blocks[blocks.length - 1][BLOCK_SIZE - 1]
-  // )
-  // 不移除分组，在外面设置移除
+  console.log("padding len:", blocks[blocks.length - 1][BLOCK_SIZE - 1])
   const buff = Buffer.concat(
     blocks,
+    data.length - blocks[blocks.length - 1][BLOCK_SIZE - 1]
   )
+  // // 不移除分组，在外面设置移除 （需要注释_encrypt的填充逻辑）
+  // const buff = Buffer.concat(
+  //   blocks,
+  // )
   return outputEncoding ? buff.toString(outputEncoding) : hexToArrayBuffer(buff)
 }
 
