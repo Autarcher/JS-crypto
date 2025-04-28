@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文件 MD5 计算</title>
+</head>
+<body>
+  <h1>计算文件 MD5 值</h1>
+
+  <!-- 文件选择输入框 -->
+  <input type="file" id="fileInput" />
+  
+  <!-- 显示 MD5 结果的区域 -->
+  <div id="md5Result"></div>
+
+  <!-- 引入打包后的 JavaScript 文件（gmCrypto） -->
+  <script src="../dist/gmCrypto.umd.js"></script>
+
+  <!-- 自定义 JavaScript 代码 -->
+  <script>
+    // 获取文件输入框元素
+    const fileInput = document.getElementById('fileInput');
+    const resultDiv = document.getElementById('md5Result');
+    
+    // 当文件被选择时触发
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];  // 获取选择的文件
+
+      if (file) {
+        // 使用 gmCrypto 来计算文件的 MD5 值
+        try {
+          // 计算文件 MD5
+          const { File } = gmCrypto;
+          let md5 = await File.calculateFileMd5(file);
+
+          // 显示 MD5 值
+          resultDiv.textContent = `文件的 MD5 值是：${md5}`;
+        } catch (error) {
+          console.error("计算 MD5 时出错：", error);
+          resultDiv.textContent = "计算 MD5 时出错，请重试。";
+        }
+      } else {
+        resultDiv.textContent = "请选择一个文件来计算 MD5。";
+      }
+    });
+  </script>
+</body>
+</html>

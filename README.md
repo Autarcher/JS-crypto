@@ -1,6 +1,6 @@
 # JS-cryptp
 
-​	本项目为gm-crypto项目的拓展，实现了sm4的纯浏览器的ECB，CBC，CTR的加解密。加解密保证了与GMSSL项目中的标准SM4加解密一致。同时实现了浏览器端的文件加解密测试。
+​	本项目为gm-crypto项目的拓展，实现了sm4的纯浏览器的ECB，CBC，CTR的加解密。加解密保证了与GMSSL项目中的标准SM4加解密一致。同时实现了浏览器端的文件加解密测试。同时基于spark-md5实现的文件md5值计算。
 
 > GMSSL项目地址：https://github.com/guanzhi/GmSSL
 
@@ -19,14 +19,17 @@
 ```shell
 // 按照项目环境依赖
 npm install
+// 安装spark-md5
+npm install spark-md5
 // 生成browser可用的js包（生成dist下的gmCrypto.js）
 npm run build
 ```
 
 ### 运行前端测试
 
-> - 项目提供ECB，CBC， CTR三种模式的加解密测试，你只需要更改browsers_sm4.html代码中的MODEL的值(ECB:1 CBC:2 CTR:3)即可测试三种SM4的加解密模式。
+> - 项目提供ECB，CBC， CTR三种模式的加解密测试，你只需要更改MODEL的值(ECB:1 CBC:2 CTR:3)
 > - 项目的加解密文件是一次性载入内存的逻辑，测试时推荐文件大小不要超过1M。 你可以自行修改文件的读取逻辑。
+> - 项目提供文件md5的纯浏览器计算测试。
 
 #### 	加密：
 
@@ -38,13 +41,24 @@ npm run build
 
 ## 注意：
 
-- 如果你想测试源项目的test请将package.json的内容换为package_old.json
+- 如果你想测试源项目的test请将package.json的内容换位package_old.json
 
   源项目链接:https://www.npmjs.com/package/gm-crypto
 
   git仓库:https://github.com/byte-fe/gm-crypto
 
+- 文件md5的计算代码在src/lib/file.js中，并未给出测试代码(但在项目中测试过可以正常使用)。
 
+  > js导入和使用示例
+  >
+  > ```js
+  > const fileInput = document.getElementById('fileInput');
+  > const file = fileInput.files[0];
+  > const {File} = gmCrypto;
+  > let md5 = File.calculateFileMd5(file);
+  > ```
+  >
+  > 
 
 ------
 
